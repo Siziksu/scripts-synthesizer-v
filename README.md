@@ -2,7 +2,7 @@
 
 ## SiziksuMoveNotes
 
-Current version: `1.00`
+Current version: `1.01`
 
 This script is used to move all or a selection of notes of the current track. You can choose to also include the parameters and, with them, the vocal modes of your choice.
 
@@ -18,3 +18,7 @@ Options:
 - Move the notes of a selection along with their parameter points
 
 When selecting to move parameters, you can also include the Voice Modes of your choice by typing them separated by commas.
+
+### Added in 1.01
+
+- Move relative to the playhead (ignores selection if present)

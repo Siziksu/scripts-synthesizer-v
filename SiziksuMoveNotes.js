@@ -21,7 +21,7 @@ function getClientInfo() {
         "name": SCRIPT_TITLE,
         "category": SCRIPT_CATEGORY,
         "author": SCRIPT_AUTHOR,
-        "versionNumber": 1.00,
+        "versionNumber": 1.01,
         "minEditorVersion": 65540
     };
 }
@@ -41,17 +41,17 @@ function main() {
         }
 
         var track = SV.getMainEditor().getCurrentTrack();
-        var selection = SV.getMainEditor().getSelection();
-        var notes = selection.getSelectedNotes();
+        var selection = answers.before || answers.after ? {} : SV.getMainEditor().getSelection();
+        var notes = answers.before || answers.after ? [] : selection.getSelectedNotes();
 
         if (answers.parameters) {
-            moveParameters(track, getSortedNotes(notes), answers.modes, threshold);
+            moveParameters(track, getSortedNotes(notes), answers, threshold);
         }
 
         switch (true) {
             case notes.length > 0:
                 var sorted = getSortedNotes(notes);
-                moveNotes(sorted, threshold);
+                moveNotes(sorted, answers, threshold);
                 break;
             default:
                 var groups = track.getNumGroups();
@@ -60,7 +60,7 @@ function main() {
                     var group = track.getGroupReference(i).getTarget();
                     if (visited.indexOf(group.getUUID()) < 0) {
                         var sorted = getSortedGroupNotes(group);
-                        moveNotes(sorted, threshold);
+                        moveNotes(sorted, answers, threshold);
                         visited.push(group.getUUID());
                     }
                 }
@@ -71,11 +71,35 @@ function main() {
     SV.finish();
 }
 
-function moveNotes(notes, threshold) {
+function moveNotes(notes, answers, threshold) {
+    var affected = [];
+    switch (true) {
+        case answers.slider == -1: // Just get the notes before playhead
+            var playhead = getPlayheadPosition();
+            for (var i = 0; i < notes.length; i++) {
+                if (notes[i].getOnset() < playhead) {
+                    affected.push(notes[i]);
+                } else {
+                    break;
+                }
+            }
+            break;
+        case answers.slider == 1: // Just get the notes after playhead
+            var playhead = getPlayheadPosition();
+            for (var i = 0; i < notes.length; i++) {
+                if (notes[i].getOnset() >= playhead) {
+                    affected.push(notes[i]);
+                }
+            }
+            break;
+        default:
+            affected = notes;
+            break;
+    }
     var onset = 0;
-    for (var i = 0; i < notes.length; i++) {
-        onset = notes[i].getOnset() + SV.QUARTER * threshold;
-        notes[i].setOnset(onset < 0 ? 0 : onset);
+    for (var i = 0; i < affected.length; i++) {
+        onset = affected[i].getOnset() + SV.QUARTER * threshold;
+        affected[i].setOnset(onset < 0 ? 0 : onset);
     }
 }
 
@@ -94,6 +118,14 @@ function moveParameters(track, notes, answers, threshold) {
         parameter = track.getGroupReference(0).getTarget().getParameter(SCRIPT_PARAMETERS[index]);
 
         switch (true) {
+            case answers.slider == -1: // Just move the points before playhead
+                var playhead = getPlayheadPosition();
+                points = parameter.getPoints(0, playhead);
+                break;
+            case answers.slider == 1: // Just move the points after playhead
+                var playhead = getPlayheadPosition();
+                points = parameter.getPoints(playhead, track.getDuration());
+                break;
             case selection: // Just move the points in the selection
                 points = parameter.getPoints(notes[0].getOnset(), notes[notes.length - 1].getEnd());
                 break;
@@ -123,14 +155,25 @@ function moveParameters(track, notes, answers, threshold) {
 
 function getForm() {
     return {
-        "title": SCRIPT_TITLE,
-        "buttons": "OkCancel",
-        "widgets": [
+        title: SCRIPT_TITLE,
+        buttons: "OkCancel",
+        message: "Moving notes relative to the playhead, ignores the selection if present.\n\nThe slider to the left means Before and to the right means After.",
+        widgets: [
             {
                 name: "amount",
                 type: "TextBox",
                 label: "Quarter multiplier (negative to move backwards)",
                 default: "0"
+            },
+            {
+                name: "slider",
+                type: "Slider",
+                label: "Relative to the playhead",
+                format: "%1.0f",
+                minValue: -1,
+                maxValue: 1,
+                interval: 1,
+                default: 0
             },
             {
                 name: "parameters",
@@ -185,4 +228,11 @@ function capitalizeVocalMode(vocalMode) {
 
 function capitalize(string) {
     return string.charAt(0).toLocaleUpperCase() + string.slice(1).toLocaleLowerCase();
+}
+
+function getPlayheadPosition() {
+    var timeAxis = SV.getProject().getTimeAxis();
+    var playback = SV.getPlayback();
+    var currentPos = playback.getPlayhead(); // Gets the current playhead position in seconds
+    return timeAxis.getBlickFromSeconds(currentPos); // Converts physical time in seconds to musical time in blicks
 }
